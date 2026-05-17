@@ -1,0 +1,450 @@
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import axios from "axios";
+import rateLimit from "express-rate-limit";
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 8787;
+const MAPS_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY;
+const GEMINI_KEY = process.env.VITE_GEMINI_API_KEY;
+const GROQ_KEY = process.env.VITE_GROQ_API_KEY;
+
+const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
+const GEOCODE_BASE = "https://maps.googleapis.com/maps/api/geocode/json";
+const GEMINI_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+const nearbyFieldMask = [
+  "places.id",
+  "places.displayName",
+  "places.rating",
+  "places.userRatingCount",
+  "places.priceLevel",
+  "places.currentOpeningHours",
+  "places.photos",
+  "places.formattedAddress",
+  "places.types",
+  "places.location",
+].join(",");
+
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: true,
+    message: "Rate limit exceeded. Please wait a minute and try again.",
+  },
+});
+
+app.use(cors());
+app.use(express.json({ limit: "1mb" }));
+app.use(limiter);
+
+function fail(message, status = 500) {
+  const error = new Error(message);
+  error.statusCode = status;
+  throw error;
+}
+
+function assertEnv() {
+  if (!MAPS_KEY) {
+    fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
+  }
+
+  if (!GEMINI_KEY) {
+    fail("Missing VITE_GEMINI_API_KEY in environment.");
+  }
+}
+
+function getTotalDays(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diff = Math.round((end - start) / (1000 * 60 * 60 * 24));
+  return diff + 1;
+}
+
+function formatDateLabel(dateValue) {
+  const date = new Date(dateValue);
+  return new Intl.DateTimeFormat("en-IN", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(date);
+}
+
+function buildDateLabels(startDate, totalDays) {
+  const labels = [];
+  const start = new Date(startDate);
+
+  for (let index = 0; index < totalDays; index += 1) {
+    const next = new Date(start);
+    next.setDate(start.getDate() + index);
+    labels.push(formatDateLabel(next.toISOString()));
+  }
+
+  return labels;
+}
+
+function extractJson(value) {
+  if (!value || typeof value !== "string") {
+    fail("AI response was empty.");
+  }
+
+  const fenced = value.match(/```json\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : value;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+
+  if (start === -1 || end === -1) {
+    fail("AI response did not contain valid JSON.");
+  }
+
+  return JSON.parse(candidate.slice(start, end + 1));
+}
+
+function buildItineraryPrompt(input) {
+  const totalDays = getTotalDays(input.startDate, input.endDate);
+  const dateLabels = buildDateLabels(input.startDate, totalDays);
+
+  return `
+Plan an India trip itinerary using this exact JSON schema and no extra text:
+{
+  "destination": "string",
+  "tripSummary": "string",
+  "totalDays": number,
+  "days": [
+    {
+      "day": number,
+      "date": "string",
+      "theme": "string",
+      "blocks": [
+        {
+          "time": "Morning | Afternoon | Evening",
+          "places": [
+            {
+              "name": "string",
+              "type": "attraction | restaurant | cafe | hotel | experience | market",
+              "description": "string",
+              "whyVisit": "string",
+              "estimatedDuration": "string",
+              "budgetNote": "string",
+              "mustVisit": boolean,
+              "coordinates": null
+            }
+          ]
+        }
+      ],
+      "dayTip": "string"
+    }
+  ]
+}
+
+Trip details:
+- From: ${input.from?.name}
+- To: ${input.to?.name}
+- Start date: ${input.startDate}
+- End date: ${input.endDate}
+- Total days: ${totalDays}
+- Date labels to use in order: ${dateLabels.join(", ")}
+- People: ${input.people}
+- Budget: ${input.budget}
+- Interests: ${(input.interests || []).join(", ") || "General"}
+
+Rules:
+- Focus on India only.
+- Use specific real place names, not generic placeholders.
+- Make descriptions vivid, practical, and specific.
+- Keep timing realistic.
+- Use exactly 3 blocks per day: Morning, Afternoon, Evening.
+- Include 1 to 3 places per block.
+- Keep tripSummary to 2 vivid sentences.
+- Every place.coordinates must be null.
+- Return valid JSON only.
+  `.trim();
+}
+
+async function callGemini(input) {
+  assertEnv();
+
+  const response = await axios.post(
+    `${GEMINI_URL}?key=${GEMINI_KEY}`,
+    {
+      contents: [
+        {
+          parts: [{ text: buildItineraryPrompt(input) }],
+        },
+      ],
+      systemInstruction: {
+        parts: [
+          {
+            text: "You are a travel planner for India. Return only valid JSON, no markdown, no explanation.",
+          },
+        ],
+      },
+    },
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      timeout: 25000,
+    },
+  );
+
+  const text =
+    response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n") || "";
+
+  return extractJson(text);
+}
+
+async function callGroq(geminiJson) {
+  if (!GROQ_KEY) {
+    return {
+      itinerary: geminiJson,
+      fallback: true,
+    };
+  }
+
+  try {
+    const response = await axios.post(
+      GROQ_URL,
+      {
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.3,
+        max_tokens: 3000,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior travel editor for India. You will receive a JSON travel itinerary. Improve it: fix any illogical ordering of places, add more specific local tips, improve descriptions to be vivid and specific, ensure timing is realistic, flag and fix any place that seems generic or touristy without value. Return only the corrected JSON with identical schema. Do not add or remove fields.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify(geminiJson),
+          },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${GROQ_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 25000,
+      },
+    );
+
+    const text = response.data?.choices?.[0]?.message?.content || "";
+    return {
+      itinerary: extractJson(text),
+      fallback: false,
+    };
+  } catch {
+    return {
+      itinerary: geminiJson,
+      fallback: true,
+    };
+  }
+}
+
+async function geocodeAddress(address) {
+  const response = await axios.get(GEOCODE_BASE, {
+    params: {
+      address,
+      key: MAPS_KEY,
+    },
+    timeout: 15000,
+  });
+
+  const first = response.data?.results?.[0];
+  if (!first?.geometry?.location) {
+    return null;
+  }
+
+  return {
+    lat: first.geometry.location.lat,
+    lng: first.geometry.location.lng,
+  };
+}
+
+async function geocodeItinerary(itinerary) {
+  const placeTargets = itinerary.days.flatMap((day, dayIndex) =>
+    day.blocks.flatMap((block, blockIndex) =>
+      block.places.map((place, placeIndex) => ({
+        dayIndex,
+        blockIndex,
+        placeIndex,
+        query: `${place.name} ${itinerary.destination} India`,
+      })),
+    ),
+  );
+
+  const coords = await Promise.all(placeTargets.map((target) => geocodeAddress(target.query).catch(() => null)));
+
+  coords.forEach((coordinate, index) => {
+    const target = placeTargets[index];
+    itinerary.days[target.dayIndex].blocks[target.blockIndex].places[target.placeIndex].coordinates = coordinate;
+  });
+
+  return itinerary;
+}
+
+async function googlePlacesNearby({ lat, lng, type, radius }) {
+  const response = await axios.post(
+    `${GOOGLE_PLACES_BASE}/places:searchNearby`,
+    {
+      includedTypes: [type],
+      locationRestriction: {
+        circle: {
+          center: {
+            latitude: lat,
+            longitude: lng,
+          },
+          radius,
+        },
+      },
+      maxResultCount: 6,
+    },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": MAPS_KEY,
+        "X-Goog-FieldMask": nearbyFieldMask,
+      },
+      timeout: 15000,
+    },
+  );
+
+  return response.data?.places || [];
+}
+
+app.post("/api/generate-itinerary", async (req, res) => {
+  try {
+    const input = req.body;
+
+    if (!input?.from?.name || !input?.to?.name || !input?.startDate || !input?.endDate) {
+      fail("Missing trip inputs.", 400);
+    }
+
+    const geminiDraft = await callGemini(input);
+    const groqResult = await callGroq(geminiDraft);
+    const itinerary = await geocodeItinerary(groqResult.itinerary);
+
+    res.json({
+      error: false,
+      itinerary,
+      meta: {
+        groqFallback: groqResult.fallback,
+      },
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      error: true,
+      message: error.message || "Unable to generate itinerary.",
+    });
+  }
+});
+
+app.get("/api/geocode", async (req, res) => {
+  try {
+    if (!MAPS_KEY) {
+      fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
+    }
+
+    const address = req.query.address?.toString().trim();
+    if (!address) {
+      fail("address is required", 400);
+    }
+
+    const location = await geocodeAddress(address);
+
+    res.json({
+      error: false,
+      location,
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      error: true,
+      message: error.message || "Geocoding failed.",
+    });
+  }
+});
+
+app.post("/api/places/nearby", async (req, res) => {
+  try {
+    if (!MAPS_KEY) {
+      fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
+    }
+
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    const type = req.body?.type?.toString();
+    const radius = Number(req.body?.radius || 1000);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng) || !type) {
+      fail("lat, lng, and type are required", 400);
+    }
+
+    const places = await googlePlacesNearby({ lat, lng, type, radius });
+    res.json({
+      error: false,
+      places,
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      error: true,
+      message: error.message || "Nearby places request failed.",
+    });
+  }
+});
+
+app.get("/api/places/photo", async (req, res) => {
+  try {
+    if (!MAPS_KEY) {
+      fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
+    }
+
+    const photoName = req.query.photo_name?.toString().trim();
+    if (!photoName) {
+      fail("photo_name is required", 400);
+    }
+
+    const response = await axios.get(
+      `${GOOGLE_PLACES_BASE}/${photoName}/media`,
+      {
+        params: {
+          maxWidthPx: 400,
+          key: MAPS_KEY,
+        },
+        responseType: "arraybuffer",
+        timeout: 15000,
+      },
+    );
+
+    res.setHeader("Content-Type", response.headers["content-type"] || "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.send(Buffer.from(response.data));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      error: true,
+      message: error.message || "Photo request failed.",
+    });
+  }
+});
+
+app.get("/api/health", (_req, res) => {
+  res.json({ error: false, ok: true });
+});
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`PlaceStack proxy listening on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
