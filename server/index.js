@@ -8,9 +8,18 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8787;
-const MAPS_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY;
-const GEMINI_KEY = process.env.VITE_GEMINI_API_KEY;
-const GROQ_KEY = process.env.VITE_GROQ_API_KEY;
+
+// Google rejects HTTP-referrer-restricted keys on the Geocoding and Places web
+// services — a server sends no Referer — so the browser key cannot be reused
+// here. GOOGLE_MAPS_SERVER_KEY is a second key restricted by IP (or left
+// unrestricted); VITE_GOOGLE_MAPS_API_KEY stays the browser-only Maps JS key.
+const MAPS_KEY = process.env.GOOGLE_MAPS_SERVER_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
+
+// These never reach the browser, so they carry no VITE_ prefix — that prefix is
+// what marks a variable as safe to inline into the client bundle. Old names are
+// still accepted so existing .env files keep working.
+const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+const GROQ_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
 
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
 const GEOCODE_BASE = "https://maps.googleapis.com/maps/api/geocode/json";
@@ -62,13 +71,24 @@ function upstreamDetail(error) {
     return "";
   }
 
-  return (
+  const message =
     data.error?.message || // Gemini, Places, Groq
     data.error_message || // Geocoding
     (typeof data.error === "string" ? data.error : "") ||
     data.message ||
-    ""
-  );
+    "";
+
+  return withKeyHint(message);
+}
+
+// The referrer-restriction rejection is the most confusing failure here: the
+// same key works in the browser, so it looks like the key is fine.
+function withKeyHint(message) {
+  if (/referer restriction/i.test(message)) {
+    return `${message} Set GOOGLE_MAPS_SERVER_KEY to a separate key that is unrestricted or IP-restricted — referrer restrictions only work for the browser Maps JavaScript API.`;
+  }
+
+  return message;
 }
 
 function failFromUpstream(error, provider) {
@@ -87,11 +107,11 @@ function failFromUpstream(error, provider) {
 
 function assertEnv() {
   if (!MAPS_KEY) {
-    fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
+    fail("Missing GOOGLE_MAPS_SERVER_KEY in environment.");
   }
 
   if (!GEMINI_KEY) {
-    fail("Missing VITE_GEMINI_API_KEY in environment.");
+    fail("Missing GEMINI_API_KEY in environment.");
   }
 }
 
@@ -320,7 +340,7 @@ async function geocodeAddress(address) {
 
   if (status && status !== "OK" && status !== "ZERO_RESULTS") {
     const detail = response.data?.error_message;
-    fail(`Geocoding request failed: ${detail || status}`, 502);
+    fail(`Geocoding request failed: ${withKeyHint(detail || status)}`, 502);
   }
 
   const first = response.data?.results?.[0];
@@ -433,7 +453,7 @@ app.post("/api/generate-itinerary", async (req, res) => {
 app.get("/api/geocode", async (req, res) => {
   try {
     if (!MAPS_KEY) {
-      fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
+      fail("Missing GOOGLE_MAPS_SERVER_KEY in environment.");
     }
 
     const address = req.query.address?.toString().trim();
@@ -458,7 +478,7 @@ app.get("/api/geocode", async (req, res) => {
 app.post("/api/places/nearby", async (req, res) => {
   try {
     if (!MAPS_KEY) {
-      fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
+      fail("Missing GOOGLE_MAPS_SERVER_KEY in environment.");
     }
 
     const lat = Number(req.body?.lat);
@@ -486,7 +506,7 @@ app.post("/api/places/nearby", async (req, res) => {
 app.get("/api/places/photo", async (req, res) => {
   try {
     if (!MAPS_KEY) {
-      fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
+      fail("Missing GOOGLE_MAPS_SERVER_KEY in environment.");
     }
 
     const photoName = req.query.photo_name?.toString().trim();
