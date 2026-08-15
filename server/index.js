@@ -40,20 +40,41 @@ const nearbyFieldMask = [
   "places.location",
 ].join(",");
 
-const limiter = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: true,
-    message: "Rate limit exceeded. Please wait a minute and try again.",
-  },
+const ITINERARY_PATH = "/api/generate-itinerary";
+const PHOTO_PATH = "/api/places/photo";
+
+function buildLimiter(limit, options = {}) {
+  return rateLimit({
+    windowMs: 60 * 1000,
+    limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: true,
+      message: "Rate limit exceeded. Please wait a minute and try again.",
+    },
+    ...options,
+  });
+}
+
+// A single nearby search renders up to six cards, each pulling an image through
+// the photo proxy, so browsing two categories used to exhaust a budget shared
+// with every other route and leave the rest of the app rate-limited.
+const photoLimiter = buildLimiter(120);
+
+// Generating an itinerary costs two model calls plus a geocode per place, so it
+// stays on a tight budget of its own.
+const itineraryLimiter = buildLimiter(10);
+
+const apiLimiter = buildLimiter(30, {
+  skip: (req) => req.path === PHOTO_PATH || req.path === ITINERARY_PATH,
 });
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
-app.use(limiter);
+app.use(PHOTO_PATH, photoLimiter);
+app.use(ITINERARY_PATH, itineraryLimiter);
+app.use(apiLimiter);
 
 function fail(message, status = 500) {
   const error = new Error(message);
@@ -248,12 +269,19 @@ async function callGemini(input) {
             },
           ],
         },
+        generationConfig: {
+          // Filling in a schema that is spelled out in the prompt does not
+          // benefit from extended reasoning, and 2.5 Flash spends more time
+          // thinking than answering when it is left on.
+          thinkingConfig: { thinkingBudget: 0 },
+          responseMimeType: "application/json",
+        },
       },
       {
         headers: {
           "Content-Type": "application/json",
         },
-        timeout: 25000,
+        timeout: 45000,
       },
     );
   } catch (error) {
@@ -354,6 +382,28 @@ async function geocodeAddress(address) {
   };
 }
 
+// A fortnight-long itinerary can hold well over a hundred places, and firing
+// every geocode lookup at once invites Google's per-second quota to reject a
+// share of them — which reads as places that simply have no location.
+const GEOCODE_CONCURRENCY = 8;
+
+async function mapWithConcurrency(items, limit, task) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await task(items[index], index);
+    }
+  });
+
+  await Promise.all(workers);
+
+  return results;
+}
+
 async function geocodeItinerary(itinerary) {
   const placeTargets = itinerary.days.flatMap((day, dayIndex) =>
     day.blocks.flatMap((block, blockIndex) =>
@@ -369,13 +419,11 @@ async function geocodeItinerary(itinerary) {
   // One unrecognisable place name must not sink the whole itinerary, but a key
   // or quota problem fails every lookup at once — surface that in the logs.
   const failures = [];
-  const coords = await Promise.all(
-    placeTargets.map((target) =>
-      geocodeAddress(target.query).catch((error) => {
-        failures.push(error.message);
-        return null;
-      }),
-    ),
+  const coords = await mapWithConcurrency(placeTargets, GEOCODE_CONCURRENCY, (target) =>
+    geocodeAddress(target.query).catch((error) => {
+      failures.push(error.message);
+      return null;
+    }),
   );
 
   if (failures.length === placeTargets.length && failures.length > 0) {
