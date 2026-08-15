@@ -10,6 +10,18 @@ const darkMapStyles = [
 
 let mapsPromise;
 
+// Overlay content is written with innerHTML and every field in it — place
+// names, durations, budget notes — comes back from a language model, so it is
+// untrusted text rather than markup.
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function buildMarkerIcon(color, scale = 1) {
   const size = 18 * scale;
   return {
@@ -189,7 +201,7 @@ export function createMapController(container, callbacks) {
         marker.addListener("mouseover", () => {
           tooltip.show(
             marker.getPosition(),
-            `<div class="map-tooltip"><strong>${place.name}</strong><span>${place.type}</span></div>`,
+            `<div class="map-tooltip"><strong>${escapeHtml(place.name)}</strong><span>${escapeHtml(place.type)}</span></div>`,
           );
         });
 
@@ -199,10 +211,10 @@ export function createMapController(container, callbacks) {
           info.show(
             marker.getPosition(),
             `<div class="map-popup">
-              <h4>${place.name}</h4>
-              <p>${place.timeBlock} · ${place.estimatedDuration}</p>
-              <p>${place.budgetNote}</p>
-              <button class="map-popup-button" data-place-id="${place.clientId}">Nearby →</button>
+              <h4>${escapeHtml(place.name)}</h4>
+              <p>${escapeHtml(place.timeBlock)} · ${escapeHtml(place.estimatedDuration)}</p>
+              <p>${escapeHtml(place.budgetNote)}</p>
+              <button class="map-popup-button" data-place-id="${escapeHtml(place.clientId)}">Nearby →</button>
             </div>`,
           );
           const button = info.div?.querySelector("[data-place-id]");
