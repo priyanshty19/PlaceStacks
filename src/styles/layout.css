@@ -632,6 +632,7 @@
 
 .status-open { color: var(--success); }
 .status-closed { color: var(--danger); }
+.status-unknown { color: var(--muted); }
 
 /* ── Mobile layout ─────────────────────────────────── */
 @media (max-width: 767px) {

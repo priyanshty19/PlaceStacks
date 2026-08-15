@@ -2,9 +2,17 @@ export function clampPeople(value) {
   return Math.min(20, Math.max(1, value));
 }
 
+// toISOString() converts to UTC first, so for anyone east of Greenwich it
+// reports yesterday's date through the late evening — which would offer a start
+// date already in the past.
+function toDateInputValue(date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 export function getDateConstraints(startDate) {
-  const today = new Date();
-  const minStart = today.toISOString().split("T")[0];
+  const minStart = toDateInputValue(new Date());
 
   if (!startDate) {
     return {
@@ -15,15 +23,15 @@ export function getDateConstraints(startDate) {
   }
 
   const start = new Date(startDate);
-  const minEnd = new Date(start);
-  minEnd.setDate(start.getDate() + 1);
   const maxEnd = new Date(start);
   maxEnd.setDate(start.getDate() + 13);
 
   return {
     minStart,
-    minEnd: minEnd.toISOString().split("T")[0],
-    maxEnd: maxEnd.toISOString().split("T")[0],
+    // A day trip is a trip: the server already plans a single-day itinerary
+    // correctly, but the form refused to let anyone ask for one.
+    minEnd: startDate,
+    maxEnd: toDateInputValue(maxEnd),
   };
 }
 
@@ -99,6 +107,13 @@ export function getNearbyPhotoUrl(photoName) {
 
 export function getOpenState(openingHours) {
   const open = openingHours?.openNow;
+
+  // Plenty of places come back without opening hours at all. Reporting those as
+  // closed is worse than admitting we do not know — it sends someone elsewhere.
+  if (typeof open !== "boolean") {
+    return { label: "○ Hours unknown", className: "status-unknown" };
+  }
+
   return open
     ? { label: "● Open", className: "status-open" }
     : { label: "● Closed", className: "status-closed" };

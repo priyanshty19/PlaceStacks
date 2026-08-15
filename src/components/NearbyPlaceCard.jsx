@@ -10,6 +10,7 @@ const emojiFallback = {
 
 export default function NearbyPlaceCard({ place, sourcePlace, onClick }) {
   const type = place.types?.[0] || "restaurant";
+  const openState = getOpenState(place.currentOpeningHours);
   const distance = distanceBetween(sourcePlace?.coordinates, {
     lat: place.location?.latitude,
     lng: place.location?.longitude,
@@ -37,7 +38,7 @@ export default function NearbyPlaceCard({ place, sourcePlace, onClick }) {
         </div>
         <div className="nearby-meta-row">
           <span>{getPriceSymbols(place.priceLevel)}</span>
-          <span className={getOpenState(place.currentOpeningHours).className}>{getOpenState(place.currentOpeningHours).label}</span>
+          <span className={openState.className}>{openState.label}</span>
           <span>{distance}</span>
         </div>
       </div>
