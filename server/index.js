@@ -52,6 +52,39 @@ function fail(message, status = 500) {
   throw error;
 }
 
+// Providers explain exactly what went wrong (retired model, exhausted quota,
+// restricted key) in the response body. Axios only surfaces "Request failed
+// with status code 404", so dig the real message out.
+function upstreamDetail(error) {
+  const data = error?.response?.data;
+
+  if (!data || Buffer.isBuffer(data) || data instanceof ArrayBuffer) {
+    return "";
+  }
+
+  return (
+    data.error?.message || // Gemini, Places, Groq
+    data.error_message || // Geocoding
+    (typeof data.error === "string" ? data.error : "") ||
+    data.message ||
+    ""
+  );
+}
+
+function failFromUpstream(error, provider) {
+  if (error.statusCode) {
+    throw error;
+  }
+
+  const status = error?.response?.status;
+  const detail = upstreamDetail(error);
+  const reason = detail || (status ? `HTTP ${status}` : error.message);
+
+  // A 404 from Gemini is not a 404 of this route — only pass through the
+  // rate limit, which the caller can actually act on.
+  fail(`${provider}: ${reason}`, status === 429 ? 429 : 502);
+}
+
 function assertEnv() {
   if (!MAPS_KEY) {
     fail("Missing VITE_GOOGLE_MAPS_API_KEY in environment.");
@@ -106,7 +139,11 @@ function extractJson(value) {
     fail("AI response did not contain valid JSON.");
   }
 
-  return JSON.parse(candidate.slice(start, end + 1));
+  try {
+    return JSON.parse(candidate.slice(start, end + 1));
+  } catch (error) {
+    fail(`AI returned malformed JSON: ${error.message}`, 502);
+  }
 }
 
 function buildItineraryPrompt(input) {
@@ -173,29 +210,35 @@ Rules:
 async function callGemini(input) {
   assertEnv();
 
-  const response = await axios.post(
-    `${GEMINI_URL}?key=${GEMINI_KEY}`,
-    {
-      contents: [
-        {
-          parts: [{ text: buildItineraryPrompt(input) }],
-        },
-      ],
-      systemInstruction: {
-        parts: [
+  let response;
+
+  try {
+    response = await axios.post(
+      `${GEMINI_URL}?key=${GEMINI_KEY}`,
+      {
+        contents: [
           {
-            text: "You are a travel planner for India. Return only valid JSON, no markdown, no explanation.",
+            parts: [{ text: buildItineraryPrompt(input) }],
           },
         ],
+        systemInstruction: {
+          parts: [
+            {
+              text: "You are a travel planner for India. Return only valid JSON, no markdown, no explanation.",
+            },
+          ],
+        },
       },
-    },
-    {
-      headers: {
-        "Content-Type": "application/json",
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        timeout: 25000,
       },
-      timeout: 25000,
-    },
-  );
+    );
+  } catch (error) {
+    failFromUpstream(error, "Gemini request failed");
+  }
 
   const text =
     response.data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n") || "";
@@ -244,7 +287,11 @@ async function callGroq(geminiJson) {
       itinerary: extractJson(text),
       fallback: false,
     };
-  } catch {
+  } catch (error) {
+    // Refinement is optional — keep the Gemini draft, but say why it was
+    // skipped so a broken key does not look like a silent no-op.
+    console.warn(`Groq refinement skipped: ${upstreamDetail(error) || error.message}`);
+
     return {
       itinerary: geminiJson,
       fallback: true,
@@ -253,13 +300,28 @@ async function callGroq(geminiJson) {
 }
 
 async function geocodeAddress(address) {
-  const response = await axios.get(GEOCODE_BASE, {
-    params: {
-      address,
-      key: MAPS_KEY,
-    },
-    timeout: 15000,
-  });
+  let response;
+
+  try {
+    response = await axios.get(GEOCODE_BASE, {
+      params: {
+        address,
+        key: MAPS_KEY,
+      },
+      timeout: 15000,
+    });
+  } catch (error) {
+    failFromUpstream(error, "Geocoding request failed");
+  }
+
+  // Geocoding reports key and quota problems as HTTP 200 with a status field,
+  // so an unchecked read here would look like "no results" instead of an error.
+  const status = response.data?.status;
+
+  if (status && status !== "OK" && status !== "ZERO_RESULTS") {
+    const detail = response.data?.error_message;
+    fail(`Geocoding request failed: ${detail || status}`, 502);
+  }
 
   const first = response.data?.results?.[0];
   if (!first?.geometry?.location) {
@@ -284,7 +346,21 @@ async function geocodeItinerary(itinerary) {
     ),
   );
 
-  const coords = await Promise.all(placeTargets.map((target) => geocodeAddress(target.query).catch(() => null)));
+  // One unrecognisable place name must not sink the whole itinerary, but a key
+  // or quota problem fails every lookup at once — surface that in the logs.
+  const failures = [];
+  const coords = await Promise.all(
+    placeTargets.map((target) =>
+      geocodeAddress(target.query).catch((error) => {
+        failures.push(error.message);
+        return null;
+      }),
+    ),
+  );
+
+  if (failures.length === placeTargets.length && failures.length > 0) {
+    console.warn(`Geocoding failed for all ${failures.length} places: ${failures[0]}`);
+  }
 
   coords.forEach((coordinate, index) => {
     const target = placeTargets[index];
@@ -295,32 +371,36 @@ async function geocodeItinerary(itinerary) {
 }
 
 async function googlePlacesNearby({ lat, lng, type, radius }) {
-  const response = await axios.post(
-    `${GOOGLE_PLACES_BASE}/places:searchNearby`,
-    {
-      includedTypes: [type],
-      locationRestriction: {
-        circle: {
-          center: {
-            latitude: lat,
-            longitude: lng,
+  try {
+    const response = await axios.post(
+      `${GOOGLE_PLACES_BASE}/places:searchNearby`,
+      {
+        includedTypes: [type],
+        locationRestriction: {
+          circle: {
+            center: {
+              latitude: lat,
+              longitude: lng,
+            },
+            radius,
           },
-          radius,
         },
+        maxResultCount: 6,
       },
-      maxResultCount: 6,
-    },
-    {
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": MAPS_KEY,
-        "X-Goog-FieldMask": nearbyFieldMask,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": MAPS_KEY,
+          "X-Goog-FieldMask": nearbyFieldMask,
+        },
+        timeout: 15000,
       },
-      timeout: 15000,
-    },
-  );
+    );
 
-  return response.data?.places || [];
+    return response.data?.places || [];
+  } catch (error) {
+    failFromUpstream(error, "Nearby places request failed");
+  }
 }
 
 app.post("/api/generate-itinerary", async (req, res) => {
@@ -414,17 +494,23 @@ app.get("/api/places/photo", async (req, res) => {
       fail("photo_name is required", 400);
     }
 
-    const response = await axios.get(
-      `${GOOGLE_PLACES_BASE}/${photoName}/media`,
-      {
-        params: {
-          maxWidthPx: 400,
-          key: MAPS_KEY,
+    let response;
+
+    try {
+      response = await axios.get(
+        `${GOOGLE_PLACES_BASE}/${photoName}/media`,
+        {
+          params: {
+            maxWidthPx: 400,
+            key: MAPS_KEY,
+          },
+          responseType: "arraybuffer",
+          timeout: 15000,
         },
-        responseType: "arraybuffer",
-        timeout: 15000,
-      },
-    );
+      );
+    } catch (error) {
+      failFromUpstream(error, "Photo request failed");
+    }
 
     res.setHeader("Content-Type", response.headers["content-type"] || "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=3600");
