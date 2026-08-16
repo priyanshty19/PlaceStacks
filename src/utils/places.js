@@ -63,6 +63,11 @@ export async function fetchPlaceReviews(placeId) {
   return data.reviews || [];
 }
 
+export async function searchPlaces(term) {
+  const data = await request(`/api/places/search?q=${encodeURIComponent(term)}`);
+  return data.places || [];
+}
+
 export async function fetchRecentReviews(limit = 6) {
   const data = await request(`/api/reviews/recent?limit=${limit}`);
   return data.reviews || [];
