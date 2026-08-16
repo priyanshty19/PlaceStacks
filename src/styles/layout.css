@@ -317,6 +317,12 @@
   scrollbar-color: var(--outline) transparent;
 }
 
+/* Flex children shrink by default, which collapsed the day navigation to a
+   4px sliver instead of letting the panel scroll. */
+.itinerary-panel > * {
+  flex-shrink: 0;
+}
+
 .itinerary-empty {
   padding: 22px;
   color: var(--secondary);
