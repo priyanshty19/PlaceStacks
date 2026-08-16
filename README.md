@@ -158,15 +158,20 @@ All routes are rate-limited to **20 requests per minute** per IP.
 ├── server/
 │   └── index.js            Express proxy — all API routes, key handling, rate limiting
 ├── src/
-│   ├── App.jsx             State orchestration, map wiring
+│   ├── App.jsx             Routes: / (landing) and /plan (planner)
+│   ├── pages/
+│   │   ├── Landing.jsx     Marketing page for the universal-review vision
+│   │   └── Planner.jsx     State orchestration, map wiring
 │   ├── components/         Header, InputForm, ItineraryPanel, MapPanel, NearbySidebar, …
+│   │   └── landing/        Hero, ReviewUniverse, LiveModule, HowItWorks, Roadmap, Footer
 │   ├── utils/
 │   │   ├── maps.js         Google Maps controller (markers, tooltips, fit-bounds)
 │   │   ├── places.js       Typed fetch wrappers for the API
 │   │   └── helpers.js      Itinerary normalization, date constraints
 │   └── styles/
 │       ├── global.css      Design tokens, buttons, animations
-│       └── layout.css      Desktop two-column + mobile bottom-sheet layouts
+│       ├── layout.css      Desktop two-column + mobile bottom-sheet layouts
+│       └── landing.css     Landing page sections
 ├── vite.config.js          Dev server + /api proxy
 └── vercel.json             Serverless function + static build
 ```
