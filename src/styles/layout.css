@@ -98,6 +98,9 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  /* The review panel is a sibling of the columns, not a child of the map, so
+     it is not buried by the stacking context the map column opens on mobile. */
+  position: relative;
 }
 
 .left-column {
@@ -744,5 +747,251 @@
 
   .powered-copy {
     display: none;
+  }
+}
+
+/* ── Reviews ───────────────────────────────────────── */
+.review-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 380px;
+  max-width: 100%;
+  padding: 18px;
+  background: rgba(15, 20, 27, 0.97);
+  backdrop-filter: blur(20px);
+  border-left: 1px solid var(--card-border);
+  z-index: 20;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 16px;
+  animation: slideIn 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.review-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-eyebrow {
+  display: block;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-family: "Space Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 5px;
+}
+
+.review-panel-head h3 {
+  font-size: 1.15rem;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.review-aggregate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.review-aggregate strong {
+  color: var(--accent);
+  font-family: "Space Mono", monospace;
+}
+
+.review-empty-note {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+}
+
+.review-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: rgba(22, 27, 34, 0.6);
+}
+
+.rating-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rating-star {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.7rem;
+  line-height: 1;
+  padding: 0 2px;
+  color: #3a3f47;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.rating-star:hover {
+  transform: scale(1.12);
+}
+
+.rating-star.is-set {
+  color: var(--accent);
+  text-shadow: 0 0 12px var(--accent-glow);
+}
+
+.rating-readout {
+  margin-left: 8px;
+  color: var(--secondary);
+  font-family: "Space Mono", monospace;
+  font-size: 0.8rem;
+}
+
+.aspect-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aspect-pill {
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--secondary);
+  padding: 6px 11px;
+  font-size: 0.73rem;
+  font-family: "Space Mono", monospace;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.aspect-pill:hover {
+  border-color: var(--accent);
+}
+
+.aspect-pill.is-active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.review-body {
+  resize: vertical;
+  font-family: inherit;
+  min-height: 68px;
+}
+
+.review-submit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.review-submit-row .primary-button {
+  padding: 12px 18px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.review-handle {
+  padding: 11px 13px;
+  font-size: 0.88rem;
+}
+
+.review-saved {
+  margin: 0;
+  color: var(--success);
+  font-size: 0.83rem;
+}
+
+.review-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-list > * {
+  flex-shrink: 0;
+}
+
+.review-item {
+  padding: 13px 15px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: rgba(22, 27, 34, 0.5);
+}
+
+.review-item-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  font-size: 0.83rem;
+}
+
+.review-item-head strong {
+  color: var(--text);
+}
+
+.review-item-head .inline-muted {
+  font-family: "Space Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.review-body-text {
+  margin: 9px 0 0;
+  color: var(--secondary);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.review-aspect-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.review-aspect {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 185, 85, 0.1);
+  border: 1px solid rgba(255, 185, 85, 0.2);
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-family: "Space Mono", monospace;
+}
+
+.rating-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 185, 85, 0.1);
+  border: 1px solid rgba(255, 185, 85, 0.22);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-family: "Space Mono", monospace;
+}
+
+@media (max-width: 767px) {
+  .review-panel {
+    position: fixed;
+    inset: auto 0 0 0;
+    top: auto;
+    height: 88dvh;
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--card-border);
+    border-radius: 24px 24px 0 0;
+    animation: sheetUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }

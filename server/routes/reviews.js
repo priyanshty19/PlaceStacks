@@ -192,13 +192,20 @@ router.get("/reviews/recent", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 10, 50);
 
+    // One review per place. The feed exists to show how much the review layer
+    // spans, and four rows about the same fort says the opposite.
     const { rows } = await query(
-      `SELECT r.*, a.handle, p.name AS place_name, p.category
-         FROM reviews r
-         JOIN authors a ON a.id = r.author_id
-         JOIN places  p ON p.id = r.place_id
-        ORDER BY r.created_at DESC
-        LIMIT $1`,
+      `SELECT * FROM (
+         SELECT DISTINCT ON (r.place_id)
+                r.id, r.place_id, r.rating, r.body, r.aspects, r.visited_on, r.created_at,
+                a.handle, p.name AS place_name, p.category
+           FROM reviews r
+           JOIN authors a ON a.id = r.author_id
+           JOIN places  p ON p.id = r.place_id
+          ORDER BY r.place_id, r.created_at DESC
+       ) latest
+       ORDER BY created_at DESC
+       LIMIT $1`,
       [limit],
     );
 

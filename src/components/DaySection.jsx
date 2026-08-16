@@ -7,6 +7,8 @@ export default function DaySection({
   onLeavePlace,
   onMapPlace,
   onNearbyPlace,
+  onReviewPlace,
+  ratings,
 }) {
   return (
     <article className="panel-card day-section" ref={refCallback}>
@@ -30,6 +32,8 @@ export default function DaySection({
                 onLeave={onLeavePlace}
                 onMap={() => onMapPlace(place)}
                 onNearby={() => onNearbyPlace(place)}
+                onReview={() => onReviewPlace(place)}
+                rating={ratings?.[place.clientId]}
               />
             ))}
           </div>

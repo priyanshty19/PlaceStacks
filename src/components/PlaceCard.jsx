@@ -7,7 +7,9 @@ const typeLabels = {
   market: "See",
 };
 
-export default function PlaceCard({ place, onHover, onLeave, onMap, onNearby }) {
+import Stars from "./Stars";
+
+export default function PlaceCard({ place, onHover, onLeave, onMap, onNearby, onReview, rating }) {
   const typeClass = `type-${typeLabels[place.type]?.toLowerCase() || "see"}`;
 
   return (
@@ -19,6 +21,12 @@ export default function PlaceCard({ place, onHover, onLeave, onMap, onNearby }) 
             <span className={`type-badge ${typeClass}`}>{place.type}</span>
             {place.mustVisit ? <span className="must-visit-badge">Must Visit</span> : null}
             <span className="duration-pill">{place.estimatedDuration}</span>
+            {rating?.reviewCount ? (
+              <span className="rating-pill">
+                <Stars rating={rating.rating} size={11} />
+                {rating.rating.toFixed(1)} ({rating.reviewCount})
+              </span>
+            ) : null}
           </div>
         </div>
         <h4>{place.name}</h4>
@@ -31,6 +39,9 @@ export default function PlaceCard({ place, onHover, onLeave, onMap, onNearby }) 
           </button>
           <button type="button" className="ghost-button" onClick={onNearby}>
             🔍 Nearby
+          </button>
+          <button type="button" className="ghost-button" onClick={onReview}>
+            ★ Reviews
           </button>
         </div>
       </div>

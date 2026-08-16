@@ -4,6 +4,7 @@ import InputForm from "../components/InputForm";
 import ItineraryPanel from "../components/ItineraryPanel";
 import MapPanel from "../components/MapPanel";
 import NearbySidebar from "../components/NearbySidebar";
+import ReviewPanel from "../components/ReviewPanel";
 import { createMapController, loadGoogleMapsScript } from "../utils/maps";
 import { generateItinerary, fetchNearbyPlaces } from "../utils/places";
 import { buildTripSummaryBar, normalizeItinerary } from "../utils/helpers";
@@ -35,6 +36,8 @@ export default function Planner() {
   const [activeDay, setActiveDay] = useState(1);
   const [hoveredPlaceId, setHoveredPlaceId] = useState("");
   const [selectedPlace, setSelectedPlace] = useState(null);
+  const [reviewPlace, setReviewPlace] = useState(null);
+  const [ratings, setRatings] = useState({});
   const [nearbyState, setNearbyState] = useState({
     open: false,
     sourcePlace: null,
@@ -202,6 +205,8 @@ export default function Planner() {
             onLeavePlace={() => setHoveredPlaceId("")}
             onMapPlace={handleMapPlace}
             onNearbyPlace={handleNearbyOpen}
+            onReviewPlace={setReviewPlace}
+            ratings={ratings}
             pipeline={pipeline}
           />
         </section>
@@ -218,7 +223,21 @@ export default function Planner() {
             fetchNearbyPlaces={fetchNearbyPlaces}
             onFocusPlace={(place) => mapControllerRef.current?.showNearbyResult(place)}
           />
+
         </section>
+
+        {reviewPlace ? (
+          <ReviewPanel
+            // Remount per place: a draft written for one fort must not follow
+            // you to the next one. Cheaper and safer than resetting by hand.
+            key={reviewPlace.clientId}
+            place={reviewPlace}
+            onClose={() => setReviewPlace(null)}
+            onRatingChange={(clientId, place) =>
+              setRatings((current) => ({ ...current, [clientId]: place }))
+            }
+          />
+        ) : null}
       </main>
     </div>
   );
