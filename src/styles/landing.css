@@ -655,3 +655,48 @@
     justify-content: center;
   }
 }
+
+/* ── Live review feed ──────────────────────────────── */
+.live-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 16px;
+}
+
+.live-review-card {
+  padding: 20px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.live-review-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.live-review-head strong {
+  color: var(--text);
+  font-family: "Playfair Display", serif;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.live-review-rating {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.8rem;
+}
+
+.live-review-card p {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.landing-eyebrow .live-dot {
+  margin-right: 7px;
+}

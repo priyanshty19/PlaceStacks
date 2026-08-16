@@ -9,6 +9,8 @@ export default function ItineraryPanel({
   onLeavePlace,
   onMapPlace,
   onNearbyPlace,
+  onReviewPlace,
+  ratings,
   pipeline,
 }) {
   if (!itinerary) {
@@ -58,6 +60,8 @@ export default function ItineraryPanel({
             onLeavePlace={onLeavePlace}
             onMapPlace={onMapPlace}
             onNearbyPlace={onNearbyPlace}
+            onReviewPlace={onReviewPlace}
+            ratings={ratings}
           />
         ))}
       </div>

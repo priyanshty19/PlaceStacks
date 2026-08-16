@@ -3,6 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
 import rateLimit from "express-rate-limit";
+import { fail } from "./http.js";
+import reviewRoutes from "./routes/reviews.js";
 
 dotenv.config();
 
@@ -76,11 +78,6 @@ app.use(PHOTO_PATH, photoLimiter);
 app.use(ITINERARY_PATH, itineraryLimiter);
 app.use(apiLimiter);
 
-function fail(message, status = 500) {
-  const error = new Error(message);
-  error.statusCode = status;
-  throw error;
-}
 
 // Providers explain exactly what went wrong (retired model, exhausted quota,
 // restricted key) in the response body. Axios only surfaces "Request failed
@@ -590,6 +587,10 @@ app.get("/api/places/photo", async (req, res) => {
     });
   }
 });
+
+// Writing a review is cheap next to an itinerary, but it is still a write, so
+// it gets its own budget rather than sharing the general read allowance.
+app.use("/api", buildLimiter(60), reviewRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ error: false, ok: true });

@@ -40,6 +40,40 @@ export async function generateItinerary(payload) {
   });
 }
 
+const AUTHOR_KEY = "placestack.authorId";
+
+// Identity is a value in localStorage and nothing more: the server issues the
+// id on first write, and holding onto it is what makes a review yours.
+export const getAuthorId = () => localStorage.getItem(AUTHOR_KEY) || null;
+export const setAuthorId = (id) => id && localStorage.setItem(AUTHOR_KEY, id);
+
+const json = (payload) => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload),
+});
+
+export async function resolvePlace(place) {
+  const data = await request("/api/places/resolve", json(place));
+  return data.place;
+}
+
+export async function fetchPlaceReviews(placeId) {
+  const data = await request(`/api/places/${placeId}/reviews`);
+  return data.reviews || [];
+}
+
+export async function fetchRecentReviews(limit = 6) {
+  const data = await request(`/api/reviews/recent?limit=${limit}`);
+  return data.reviews || [];
+}
+
+export async function submitReview(payload) {
+  const data = await request("/api/reviews", json({ ...payload, authorId: getAuthorId() }));
+  setAuthorId(data.authorId);
+  return data;
+}
+
 export async function fetchNearbyPlaces(payload) {
   const data = await request("/api/places/nearby", {
     method: "POST",
