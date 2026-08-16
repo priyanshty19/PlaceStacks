@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import PipelineStatus from "./PipelineStatus";
+import { DesktopNav } from "./AppNav";
 
 export default function Header({ pipeline, variant = "app" }) {
   return (
@@ -12,17 +13,8 @@ export default function Header({ pipeline, variant = "app" }) {
         </div>
       </Link>
 
-      {pipeline ? (
-        <PipelineStatus pipeline={pipeline} compact />
-      ) : (
-        <nav className="header-nav">
-          <a href="#universe">What you can review</a>
-          <a href="#roadmap">Roadmap</a>
-          <Link to="/plan" className="header-cta">
-            Plan a trip →
-          </Link>
-        </nav>
-      )}
+      {pipeline ? <PipelineStatus pipeline={pipeline} compact /> : <DesktopNav />}
+
     </header>
   );
 }

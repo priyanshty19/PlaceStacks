@@ -700,3 +700,252 @@
 .landing-eyebrow .live-dot {
   margin-right: 7px;
 }
+
+/* ── Mobile tab bar (app shell) ────────────────────── */
+.mobile-tab-bar {
+  display: none;
+}
+
+.desktop-nav a.is-current {
+  color: var(--accent);
+}
+
+@media (max-width: 767px) {
+  .mobile-tab-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    background: rgba(15, 20, 27, 0.94);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--card-border);
+    /* Clear the home indicator on modern phones. */
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .tab-item {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    padding: 6px 0;
+    text-decoration: none;
+    color: var(--muted);
+    transition: color 0.15s ease;
+    /* A tab is a tap target before it is a link. */
+    min-height: 44px;
+    align-content: center;
+  }
+
+  .tab-item.is-current {
+    color: var(--accent);
+  }
+
+  .tab-icon {
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .tab-item.is-current .tab-icon {
+    filter: drop-shadow(0 0 8px var(--accent-glow));
+  }
+
+  .tab-label {
+    font-family: "Space Mono", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+/* ── Reviewer tab ──────────────────────────────────── */
+.reviews-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.reviews-main {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  flex: 1;
+}
+
+.reviews-intro h2 {
+  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+  color: var(--text);
+  line-height: 1.15;
+}
+
+.reviews-intro p {
+  margin: 12px 0 0;
+  color: var(--secondary);
+  line-height: 1.7;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 28px 0 20px;
+  padding: 0 16px;
+  border: 1px solid var(--outline);
+  border-radius: 16px;
+  background: rgba(13, 17, 23, 0.6);
+}
+
+.search-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 185, 85, 0.12);
+}
+
+.search-box .field {
+  border: none;
+  background: none;
+  padding: 15px 0;
+}
+
+.search-box .field:focus {
+  box-shadow: none;
+}
+
+.search-results,
+.recent-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.result-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: rgba(22, 27, 34, 0.55);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+
+.result-card:hover {
+  border-color: rgba(255, 185, 85, 0.35);
+  transform: translateY(-1px);
+}
+
+.result-icon {
+  font-size: 1.3rem;
+}
+
+.result-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.result-copy strong {
+  font-family: "Playfair Display", serif;
+  font-size: 1rem;
+}
+
+.result-copy .inline-muted {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-family: "Space Mono", monospace;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.add-new-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px dashed var(--outline);
+  border-radius: 18px;
+  background: rgba(22, 27, 34, 0.4);
+}
+
+.add-new-card p {
+  margin: 0;
+  color: var(--secondary);
+  line-height: 1.6;
+}
+
+.add-new-card .primary-button {
+  justify-self: start;
+  padding: 13px 22px;
+  font-size: 0.78rem;
+}
+
+.category-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.recent-strip h3 {
+  font-size: 1.2rem;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+
+.back-button {
+  margin-bottom: 18px;
+  padding: 10px 16px;
+}
+
+/* Inline variant: the same panel, unpinned from the map edge. */
+.review-panel-inline {
+  position: static;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  background: none;
+  backdrop-filter: none;
+  border-left: none;
+  animation: none;
+  display: grid;
+  grid-template-rows: auto auto auto;
+}
+
+.review-panel-inline .review-list {
+  overflow: visible;
+}
+
+@media (max-width: 767px) {
+  .reviews-main {
+    padding: 24px 16px 96px;
+  }
+
+  .app-shell,
+  .landing-shell {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .landing-footer {
+    padding-bottom: 96px;
+  }
+
+  .review-panel-inline {
+    position: static;
+    height: auto;
+    border-radius: 0;
+  }
+}

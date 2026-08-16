@@ -24,7 +24,7 @@ function timeAgo(value) {
   return `${rounded} ${unit}${rounded > 1 ? "s" : ""} ago`;
 }
 
-export default function ReviewPanel({ place, onClose, onRatingChange }) {
+export default function ReviewPanel({ place, onClose, onRatingChange, variant = "panel" }) {
   const [resolved, setResolved] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [rating, setRating] = useState(0);
@@ -92,7 +92,7 @@ export default function ReviewPanel({ place, onClose, onRatingChange }) {
   };
 
   return (
-    <aside className="review-panel">
+    <aside className={`review-panel review-panel-${variant}`}>
       <header className="review-panel-head">
         <div>
           <span className="review-eyebrow">Reviews</span>
@@ -109,9 +109,11 @@ export default function ReviewPanel({ place, onClose, onRatingChange }) {
             <p className="inline-muted review-empty-note">No reviews yet — be the first.</p>
           )}
         </div>
-        <button type="button" className="ghost-button close-button" onClick={onClose} aria-label="Close reviews">
-          ✕
-        </button>
+        {onClose ? (
+          <button type="button" className="ghost-button close-button" onClick={onClose} aria-label="Close reviews">
+            ✕
+          </button>
+        ) : null}
       </header>
 
       <div className="review-form">

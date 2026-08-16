@@ -1,4 +1,5 @@
 import Header from "../components/Header";
+import MobileTabBar from "../components/AppNav";
 import LandingHero from "../components/landing/LandingHero";
 import ReviewUniverse from "../components/landing/ReviewUniverse";
 import LiveModule from "../components/landing/LiveModule";
@@ -20,6 +21,7 @@ export default function Landing() {
         <Roadmap />
       </main>
       <LandingFooter />
+      <MobileTabBar />
     </div>
   );
 }

@@ -79,26 +79,38 @@ async function resolvePlace(input) {
     return rows[0];
   }
 
-  const { rows: existing } = await query(
-    `SELECT * FROM places
-      WHERE google_place_id IS NULL
-        AND lower(name) = lower($1)
-        AND category = $2
-        AND (($3::float8 IS NULL AND lat IS NULL) OR (abs(lat - $3) < 0.002 AND abs(lng - $4) < 0.002))
-      LIMIT 1`,
-    [input.name, input.category, input.lat, input.lng],
-  );
-
-  if (existing[0]) {
-    return existing[0];
-  }
-
+  // ON CONFLICT against the natural-key index: concurrent callers converge on
+  // one row instead of racing between a SELECT and an INSERT.
   const { rows } = await query(
-    `INSERT INTO places (name, category, lat, lng, address) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    `INSERT INTO places (name, category, lat, lng, address)
+          VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (lower(name), category, round(lat::numeric, 3), round(lng::numeric, 3))
+       WHERE google_place_id IS NULL
+       DO UPDATE SET address = COALESCE(places.address, EXCLUDED.address)
+       RETURNING *`,
     [input.name, input.category, input.lat, input.lng, input.address],
   );
 
   return rows[0];
+}
+
+// Lookup without creating. Opening a review panel is a read; it used to leave a
+// place row behind whether or not anyone went on to review anything.
+async function findPlace(input) {
+  const { rows } = await query(
+    input.googlePlaceId
+      ? `SELECT * FROM places WHERE google_place_id = $1 LIMIT 1`
+      : `SELECT * FROM places
+          WHERE google_place_id IS NULL
+            AND lower(name) = lower($1)
+            AND category = $2
+            AND round(lat::numeric, 3) IS NOT DISTINCT FROM round($3::numeric, 3)
+            AND round(lng::numeric, 3) IS NOT DISTINCT FROM round($4::numeric, 3)
+          LIMIT 1`,
+    input.googlePlaceId ? [input.googlePlaceId] : [input.name, input.category, input.lat, input.lng],
+  );
+
+  return rows[0] || null;
 }
 
 async function resolveAuthor(authorId, handle) {
@@ -157,10 +169,33 @@ router.use(async (_req, _res, next) => {
 // place is the moment that place first becomes a row.
 router.post("/places/resolve", async (req, res) => {
   try {
-    const place = await resolvePlace(readPlaceInput(req.body));
-    res.json({ error: false, place: publicPlace(place) });
+    const place = await findPlace(readPlaceInput(req.body));
+    res.json({ error: false, place: place ? publicPlace(place) : null });
   } catch (error) {
     sendError(res, error, "Could not resolve that place.");
+  }
+});
+
+// Powers the Reviewer tab: anything already reviewed can be found by name.
+router.get("/places/search", async (req, res) => {
+  try {
+    const term = String(req.query.q ?? "").trim();
+
+    if (term.length < 2) {
+      return res.json({ error: false, places: [] });
+    }
+
+    const { rows } = await query(
+      `SELECT * FROM places
+        WHERE lower(name) LIKE '%' || lower($1) || '%'
+        ORDER BY review_count DESC, name ASC
+        LIMIT 20`,
+      [term],
+    );
+
+    res.json({ error: false, places: rows.map(publicPlace) });
+  } catch (error) {
+    sendError(res, error, "Search failed.");
   }
 });
 

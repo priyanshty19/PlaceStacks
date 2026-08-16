@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "../components/Header";
+import MobileTabBar from "../components/AppNav";
 import InputForm from "../components/InputForm";
 import ItineraryPanel from "../components/ItineraryPanel";
 import MapPanel from "../components/MapPanel";
@@ -239,6 +240,7 @@ export default function Planner() {
           />
         ) : null}
       </main>
+      <MobileTabBar />
     </div>
   );
 }

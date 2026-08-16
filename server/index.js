@@ -592,6 +592,18 @@ app.get("/api/places/photo", async (req, res) => {
 // it gets its own budget rather than sharing the general read allowance.
 app.use("/api", buildLimiter(60), reviewRoutes);
 
+// Anything thrown past a route handler — a database that will not connect, most
+// likely — reached Express's default handler and came back as an HTML error
+// page, which the client could only report as unreadable.
+app.use("/api", (error, _req, res, _next) => {
+  console.error("Unhandled API error:", error);
+
+  res.status(error.statusCode || 500).json({
+    error: true,
+    message: error.message || "Something went wrong.",
+  });
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ error: false, ok: true });
 });

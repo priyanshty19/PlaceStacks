@@ -3,7 +3,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 
-const DATABASE_URL = process.env.DATABASE_URL || "postgres://localhost:5432/placestack_dev";
+// Vercel's Neon integration injects its own names depending on how the resource
+// is connected, so accept the ones it actually sets rather than insisting on one.
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.DATABASE_URL_UNPOOLED ||
+  process.env.POSTGRES_URL_NON_POOLING ||
+  "postgres://localhost:5432/placestack_dev";
 
 // Hosted Postgres (Neon, Supabase, Vercel) terminates TLS with certificates the
 // default trust store rejects; a local socket needs no TLS at all.

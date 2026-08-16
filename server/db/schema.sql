@@ -38,6 +38,18 @@ CREATE TABLE IF NOT EXISTS reviews (
 CREATE INDEX IF NOT EXISTS reviews_place_recent_idx ON reviews (place_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS reviews_recent_idx ON reviews (created_at DESC);
 
+-- Without a listing to key on, a place is its name, kind and rough position.
+-- Selecting before inserting loses that race — two people reviewing the same
+-- unlisted cart at once each found nothing and each created it. Let the index
+-- arbitrate instead. NULLS NOT DISTINCT so places with no coordinates collide
+-- too, which is exactly the case that produced duplicates.
+CREATE UNIQUE INDEX IF NOT EXISTS places_natural_key_idx
+    ON places (lower(name), category, round(lat::numeric, 3), round(lng::numeric, 3))
+    NULLS NOT DISTINCT
+    WHERE google_place_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS places_name_search_idx ON places (lower(name));
+
 -- Aggregates live in the database so the invariant holds regardless of which
 -- code path writes, and so a place card never triggers an AVG() over reviews.
 CREATE OR REPLACE FUNCTION sync_place_rating() RETURNS trigger AS $$
